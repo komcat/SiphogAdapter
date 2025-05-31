@@ -33,6 +33,8 @@ int Win32SocketData::wsaRefCount = 0;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 // Linux platform data structure
 struct LinuxSocketData {
@@ -181,36 +183,65 @@ namespace SiphogLib {
 #ifdef _WIN32
         Win32SocketData* data = static_cast<Win32SocketData*>(platformHandle);
 
+        // Set socket to non-blocking for accept
+        u_long mode = 1; // 1 to enable non-blocking socket
+        ioctlsocket(data->serverSocket, FIONBIO, &mode);
+
         struct sockaddr_in clientAddr;
         int clientAddrLen = sizeof(clientAddr);
 
         data->clientSocket = accept(data->serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (data->clientSocket == INVALID_SOCKET) {
-            std::cerr << "Failed to accept client connection" << std::endl;
+            int error = WSAGetLastError();
+            if (error == WSAEWOULDBLOCK) {
+                // No connection pending, this is normal
+                return false;
+            }
+            std::cerr << "Accept failed with error: " << error << std::endl;
             return false;
         }
+
+        // Set client socket back to blocking
+        mode = 0; // 0 to disable non-blocking socket
+        ioctlsocket(data->clientSocket, FIONBIO, &mode);
 
         char clientIP[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
         data->clientInfo = std::string(clientIP) + ":" + std::to_string(ntohs(clientAddr.sin_port));
         data->clientConnected = true;
 
+        std::cout << "Client connected: " << data->clientInfo << std::endl;
+
 #else
         LinuxSocketData* data = static_cast<LinuxSocketData*>(platformHandle);
+
+        // Set socket to non-blocking
+        int flags = fcntl(data->serverSocket, F_GETFL, 0);
+        fcntl(data->serverSocket, F_SETFL, flags | O_NONBLOCK);
 
         struct sockaddr_in clientAddr;
         socklen_t clientAddrLen = sizeof(clientAddr);
 
         data->clientSocket = accept(data->serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (data->clientSocket < 0) {
-            std::cerr << "Failed to accept client connection" << std::endl;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // No connection pending, this is normal
+                return false;
+            }
+            std::cerr << "Accept failed: " << strerror(errno) << std::endl;
             return false;
         }
+
+        // Set client socket back to blocking
+        flags = fcntl(data->clientSocket, F_GETFL, 0);
+        fcntl(data->clientSocket, F_SETFL, flags & ~O_NONBLOCK);
 
         char clientIP[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
         data->clientInfo = std::string(clientIP) + ":" + std::to_string(ntohs(clientAddr.sin_port));
         data->clientConnected = true;
+
+        std::cout << "Client connected: " << data->clientInfo << std::endl;
 #endif
 
         return true;

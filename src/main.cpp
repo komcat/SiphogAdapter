@@ -88,11 +88,25 @@ void setupSiphogCallbacks() {
         }
         });
 
-    // Set up server status callback
+    // Set up server status callback with debugging
     siphogControl.setServerStatusCallback([](const std::string& status) {
         serverStatus = status;
-        serverRunning = siphogControl.isServerRunning();
-        clientConnected = siphogControl.isClientConnected();
+
+        // Update server state variables
+        bool newServerRunning = siphogControl.isServerRunning();
+        bool newClientConnected = siphogControl.isClientConnected();
+
+        if (newServerRunning != serverRunning) {
+            serverRunning = newServerRunning;
+            addLogMessage("Server running state changed: " + std::string(serverRunning ? "true" : "false"));
+        }
+
+        if (newClientConnected != clientConnected) {
+            clientConnected = newClientConnected;
+            addLogMessage("Client connected state changed: " + std::string(clientConnected ? "true" : "false"));
+        }
+
+        addLogMessage("Server status update: " + status);
         });
 }
 
