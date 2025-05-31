@@ -1,185 +1,239 @@
 #include "SiphogControl.h"
+#include "SiphogServer.h"
 #include <stdexcept>
 #include <thread>
 #include <chrono>
 
 namespace SiphogLib {
 
-  SiphogControl::SiphogControl() {
-  }
-
-  SiphogControl::~SiphogControl() {
-    disconnect();
-  }
-
-  std::vector<std::string> SiphogControl::getAvailablePorts() {
-    return SerialPort::getAvailablePorts();
-  }
-
-  bool SiphogControl::connect(const std::string& portName) {
-    if (isConnected.load()) {
-      onLogMessage("Already connected to a device", true);
-      return false;
+    SiphogControl::SiphogControl() {
+        // Initialize server
+        server = std::make_unique<SiphogServer>();
     }
 
-    try {
-      // Create new serial port instance
-      serialPort = std::make_shared<SerialPort>(portName, currentBaudrate);
+    SiphogControl::~SiphogControl() {
+        stopServer();
+        disconnect();
+    }
 
-      // Set up callbacks
-      serialPort->setLogCallback([this](const std::string& msg, bool isError) {
-        onLogMessage(msg, isError);
-      });
+    std::vector<std::string> SiphogControl::getAvailablePorts() {
+        return SerialPort::getAvailablePorts();
+    }
 
-      serialPort->setMessageCallback([this](const SiphogMessageModel& msg) {
-        onMessageReceived(msg);
-      });
-
-      // Attempt to open the connection
-      if (!serialPort->open()) {
-        serialPort.reset();
-        onLogMessage("Failed to open serial port: " + portName, true);
-        if (connectionCallback) {
-          connectionCallback(false, portName);
+    bool SiphogControl::connect(const std::string& portName) {
+        if (isConnected.load()) {
+            onLogMessage("Already connected to a device", true);
+            return false;
         }
-        return false;
-      }
 
-      // Initialize device with control modes
-      try {
-        SiphogCommand::initializeDevice(serialPort);
-        onLogMessage("Device initialized with factory unlock and control modes set", false);
+        try {
+            // Create new serial port instance
+            serialPort = std::make_shared<SerialPort>(portName, currentBaudrate);
 
-        // Set initial values when connecting
-        SiphogCommand::setSledCurrentSetpoint(serialPort, static_cast<uint16_t>(currentSledCurrent));
-        SiphogCommand::setTemperatureSetpoint(serialPort, static_cast<int16_t>(currentTemperature));
+            // Set up callbacks
+            serialPort->setLogCallback([this](const std::string& msg, bool isError) {
+                onLogMessage(msg, isError);
+                });
 
-        onLogMessage("Initial settings applied: SLED Current = " + std::to_string(currentSledCurrent) +
-          "mA, Temperature = " + std::to_string(currentTemperature) + "°C", false);
-      }
-      catch (const std::exception& ex) {
-        onLogMessage("Device initialization error: " + std::string(ex.what()), true);
-      }
+            serialPort->setMessageCallback([this](const SiphogMessageModel& msg) {
+                onMessageReceived(msg);
+                });
 
-      isConnected.store(true);
-      onLogMessage("Connected to " + portName + " at " + std::to_string(currentBaudrate) + " baud", false);
+            // Attempt to open the connection
+            if (!serialPort->open()) {
+                serialPort.reset();
+                onLogMessage("Failed to open serial port: " + portName, true);
+                if (connectionCallback) {
+                    connectionCallback(false, portName);
+                }
+                return false;
+            }
 
-      // Notify connection state change
-      if (connectionCallback) {
-        connectionCallback(true, portName);
-      }
+            // Initialize device with control modes
+            try {
+                SiphogCommand::initializeDevice(serialPort);
+                onLogMessage("Device initialized with factory unlock and control modes set", false);
 
-      return true;
-    }
-    catch (const std::exception& ex) {
-      onLogMessage("Connection error: " + std::string(ex.what()), true);
+                // Set initial values when connecting
+                SiphogCommand::setSledCurrentSetpoint(serialPort, static_cast<uint16_t>(currentSledCurrent));
+                SiphogCommand::setTemperatureSetpoint(serialPort, static_cast<int16_t>(currentTemperature));
 
-      // Clean up on error
-      if (serialPort) {
-        serialPort.reset();
-      }
+                onLogMessage("Initial settings applied: SLED Current = " + std::to_string(currentSledCurrent) +
+                    "mA, Temperature = " + std::to_string(currentTemperature) + "°C", false);
+            }
+            catch (const std::exception& ex) {
+                onLogMessage("Device initialization error: " + std::string(ex.what()), true);
+            }
 
-      // Notify connection failure
-      if (connectionCallback) {
-        connectionCallback(false, portName);
-      }
+            isConnected.store(true);
+            onLogMessage("Connected to " + portName + " at " + std::to_string(currentBaudrate) + " baud", false);
 
-      return false;
-    }
-  }
+            // Notify connection state change
+            if (connectionCallback) {
+                connectionCallback(true, portName);
+            }
 
-  void SiphogControl::disconnect() {
-    if (!isConnected.load()) {
-      return;
-    }
+            return true;
+        }
+        catch (const std::exception& ex) {
+            onLogMessage("Connection error: " + std::string(ex.what()), true);
 
-    std::string portName = getPortName();
+            // Clean up on error
+            if (serialPort) {
+                serialPort.reset();
+            }
 
-    if (serialPort) {
-      serialPort->close();
-      serialPort.reset();
-    }
+            // Notify connection failure
+            if (connectionCallback) {
+                connectionCallback(false, portName);
+            }
 
-    isConnected.store(false);
-    onLogMessage("Disconnected from serial port", false);
-
-    // Notify connection state change
-    if (connectionCallback) {
-      connectionCallback(false, portName);
-    }
-  }
-
-  bool SiphogControl::applySettings(int currentMa, int temperatureC) {
-    if (!isConnected.load() || !serialPort) {
-      onLogMessage("Cannot apply settings: Serial port is not open", true);
-      return false;
+            return false;
+        }
     }
 
-    try {
-      // Ensure values are within reasonable limits
-      if (currentMa < 0 || currentMa > 500) {
-        onLogMessage("Invalid SLED current value: " + std::to_string(currentMa) +
-          "mA. Must be between 0 and 500mA.", true);
-        return false;
-      }
+    void SiphogControl::disconnect() {
+        if (!isConnected.load()) {
+            return;
+        }
 
-      if (temperatureC < 0 || temperatureC > 50) {
-        onLogMessage("Invalid temperature value: " + std::to_string(temperatureC) +
-          "°C. Must be between 0 and 50°C.", true);
-        return false;
-      }
+        std::string portName = getPortName();
 
-      // Send commands to device
-      SiphogCommand::setSledCurrentSetpoint(serialPort, static_cast<uint16_t>(currentMa));
-      SiphogCommand::setTemperatureSetpoint(serialPort, static_cast<int16_t>(temperatureC));
+        if (serialPort) {
+            serialPort->close();
+            serialPort.reset();
+        }
 
-      // Update internal settings
-      currentSledCurrent = currentMa;
-      currentTemperature = temperatureC;
+        isConnected.store(false);
+        onLogMessage("Disconnected from serial port", false);
 
-      onLogMessage("Settings applied: SLED Current = " + std::to_string(currentMa) +
-        "mA, Temperature = " + std::to_string(temperatureC) + "°C", false);
-      return true;
+        // Notify connection state change
+        if (connectionCallback) {
+            connectionCallback(false, portName);
+        }
     }
-    catch (const std::exception& ex) {
-      onLogMessage("Error applying settings: " + std::string(ex.what()), true);
-      return false;
+
+    bool SiphogControl::applySettings(int currentMa, int temperatureC) {
+        if (!isConnected.load() || !serialPort) {
+            onLogMessage("Cannot apply settings: Serial port is not open", true);
+            return false;
+        }
+
+        try {
+            // Ensure values are within reasonable limits
+            if (currentMa < 0 || currentMa > 500) {
+                onLogMessage("Invalid SLED current value: " + std::to_string(currentMa) +
+                    "mA. Must be between 0 and 500mA.", true);
+                return false;
+            }
+
+            if (temperatureC < 0 || temperatureC > 50) {
+                onLogMessage("Invalid temperature value: " + std::to_string(temperatureC) +
+                    "°C. Must be between 0 and 50°C.", true);
+                return false;
+            }
+
+            // Send commands to device
+            SiphogCommand::setSledCurrentSetpoint(serialPort, static_cast<uint16_t>(currentMa));
+            SiphogCommand::setTemperatureSetpoint(serialPort, static_cast<int16_t>(temperatureC));
+
+            // Update internal settings
+            currentSledCurrent = currentMa;
+            currentTemperature = temperatureC;
+
+            onLogMessage("Settings applied: SLED Current = " + std::to_string(currentMa) +
+                "mA, Temperature = " + std::to_string(temperatureC) + "°C", false);
+            return true;
+        }
+        catch (const std::exception& ex) {
+            onLogMessage("Error applying settings: " + std::string(ex.what()), true);
+            return false;
+        }
     }
-  }
 
-  void SiphogControl::onMessageReceived(const SiphogMessageModel& message) {
-    lastMessage = message;
+    void SiphogControl::onMessageReceived(const SiphogMessageModel& message) {
+        lastMessage = message;
 
-    // Forward to external callback if set
-    if (messageCallback) {
-      messageCallback(message);
+        // Update server with new data if running
+        if (server && server->isServerRunning()) {
+            server->updateData(message);
+        }
+
+        // Forward to external callback if set
+        if (messageCallback) {
+            messageCallback(message);
+        }
     }
-  }
 
-  void SiphogControl::onLogMessage(const std::string& message, bool isError) {
-    // Forward to external callback if set
-    if (logCallback) {
-      logCallback(message, isError);
+    void SiphogControl::onLogMessage(const std::string& message, bool isError) {
+        // Forward to external callback if set
+        if (logCallback) {
+            logCallback(message, isError);
+        }
     }
-  }
 
-  void SiphogControl::setLogCallback(std::function<void(const std::string&, bool)> callback) {
-    logCallback = callback;
-  }
-
-  void SiphogControl::setMessageCallback(std::function<void(const SiphogMessageModel&)> callback) {
-    messageCallback = callback;
-  }
-
-  void SiphogControl::setConnectionCallback(std::function<void(bool, const std::string&)> callback) {
-    connectionCallback = callback;
-  }
-
-  std::string SiphogControl::getPortName() const {
-    if (serialPort) {
-      return serialPort->getPortName();
+    void SiphogControl::setLogCallback(std::function<void(const std::string&, bool)> callback) {
+        logCallback = callback;
     }
-    return "";
-  }
+
+    void SiphogControl::setMessageCallback(std::function<void(const SiphogMessageModel&)> callback) {
+        messageCallback = callback;
+    }
+
+    void SiphogControl::setConnectionCallback(std::function<void(bool, const std::string&)> callback) {
+        connectionCallback = callback;
+    }
+
+    void SiphogControl::setServerStatusCallback(std::function<void(const std::string&)> callback) {
+        serverStatusCallback = callback;
+        if (server) {
+            server->setStatusCallback(callback);
+        }
+    }
+
+    bool SiphogControl::startServer(const std::string& host, int port) {
+        if (!server) {
+            server = std::make_unique<SiphogServer>(host, port);
+        }
+
+        // Set up server callbacks
+        server->setLogCallback([this](const std::string& msg, bool isError) {
+            onLogMessage(msg, isError);
+            });
+
+        if (serverStatusCallback) {
+            server->setStatusCallback(serverStatusCallback);
+        }
+
+        return server->startServer();
+    }
+
+    void SiphogControl::stopServer() {
+        if (server) {
+            server->stopServer();
+        }
+    }
+
+    bool SiphogControl::isServerRunning() const {
+        return server && server->isServerRunning();
+    }
+
+    bool SiphogControl::isClientConnected() const {
+        return server && server->isClientConnected();
+    }
+
+    std::string SiphogControl::getServerInfo() const {
+        if (server && server->isServerRunning()) {
+            return server->getHost() + ":" + std::to_string(server->getPort());
+        }
+        return "";
+    }
+
+    std::string SiphogControl::getPortName() const {
+        if (serialPort) {
+            return serialPort->getPortName();
+        }
+        return "";
+    }
 
 } // namespace SiphogLib
