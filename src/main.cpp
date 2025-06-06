@@ -538,7 +538,7 @@ void drawStatusBar() {
 
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1800, 1200, "SiPhOG Control & Server Application with Real-time Charts");
+    InitWindow(800, 600, "SiPhOG Control & Server Application with Real-time Charts");
 
 #pragma region imgui
     rlImGuiSetup(true);
