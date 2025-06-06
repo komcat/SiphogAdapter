@@ -172,9 +172,15 @@ namespace SiphogLib {
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(6);
 
-        // Calculate derived values like in Python version
-        double photoCurrentUa = message.sldPowerUw / PWR_MON_TRANSFER_FUNC * 1e6;
-        double targetSagPowerV = TARGET_LOSS_IN_FRACTION * message.sldPowerUw / PWR_MON_TRANSFER_FUNC * SAGNAC_TIA_GAIN;
+        // IMPORTANT: Use sagPowerV (which is "SLD_PWR (V)" equivalent) not sldPowerUw
+        // This matches the Python code that uses msg.data_dict["SLD_PWR (V)"]
+
+        // Calculate derived values exactly like Python version:
+        // msg.data_dict["Photo Current (uA)"] = msg.data_dict["SLD_PWR (V)"] / PWR_MON_TRANSFER_FUNC * 1e6
+        double photoCurrentUa = message.sagPowerV / PWR_MON_TRANSFER_FUNC * 1e6;
+
+        // msg.data_dict["Target SAG_PWR (V)"] = TARGET_LOSS_IN_FRACTION * msg.data_dict["SLD_PWR (V)"] / PWR_MON_TRANSFER_FUNC * SAGNAC_TIA_GAIN
+        double targetSagPowerV = TARGET_LOSS_IN_FRACTION * message.sagPowerV / PWR_MON_TRANSFER_FUNC * SAGNAC_TIA_GAIN;
 
         // Format data according to the keys: 
         // "SLED_Current (mA)", "Photo Current (uA)", "SLED_Temp (C)", "Target SAG_PWR (V)", "SAG_PWR (V)", "TEC_Current (mA)"

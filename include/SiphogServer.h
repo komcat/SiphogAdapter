@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "SiphogMessageModel.h"
 #include <string>
 #include <vector>
@@ -7,16 +7,18 @@
 #include <functional>
 #include <mutex>
 #include <memory>
+#include <cmath>
 
 namespace SiphogLib {
 
     // Forward declaration to avoid including platform headers
     class PlatformSocket;
 
-    // Constants from the Python version
-    constexpr double PWR_MON_TRANSFER_FUNC = 0.8; // Example value, adjust as needed
-    constexpr double TARGET_LOSS_IN_FRACTION = 0.1; // Example value, adjust as needed
-    constexpr double SAGNAC_TIA_GAIN = 1000.0; // Example value, adjust as needed
+    // Constants matching the Python version exactly
+    constexpr double PWR_MON_TRANSFER_FUNC = 249.0 * 8.5; // = 2116.5 Voltage/Ampere
+    constexpr double SAGNAC_TIA_GAIN = 20000.0; // Voltage/Ampere
+    constexpr double TARGET_LOSS_IN_dB = -5.7;
+    const double TARGET_LOSS_IN_FRACTION = std::pow(10.0, TARGET_LOSS_IN_dB / 10.0); // ≈ 0.269
 
     /**
      * @brief TCP server for broadcasting SiPhOG data to clients

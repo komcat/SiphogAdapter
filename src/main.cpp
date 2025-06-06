@@ -294,15 +294,16 @@ void drawDataDisplay() {
         ImGui::Text("  SLED Temp: %.2f °C", lastMessage.sledTemp);
         ImGui::Text("  TEC Current: %.2f mA", lastMessage.tecCurrent);
 
-        double photoCurrentUa = lastMessage.sldPowerUw / 0.8 * 1e6;
-        double targetSagPowerV = 0.1 * lastMessage.sldPowerUw / 0.8 * 1000.0;
+        // Calculate derived values like the server does
+        double photoCurrentUa = lastMessage.sagPowerV / (249.0 * 8.5) * 1e6; // Using correct PWR_MON_TRANSFER_FUNC
+        double targetSagPowerV = 0.269153 * lastMessage.sagPowerV / (249.0 * 8.5) * 20000.0; // TARGET_LOSS_IN_FRACTION * SAGNAC_TIA_GAIN
 
         ImGui::Separator();
         ImGui::Text("Power Measurements:");
-        ImGui::Text("  Photo Current: %.2f µA", photoCurrentUa);
+        ImGui::Text("  Photo Current: %.2f uA", photoCurrentUa);
         ImGui::Text("  SAG Power: %.4f V", lastMessage.sagPowerV);
         ImGui::Text("  Target SAG Power: %.4f V", targetSagPowerV);
-        ImGui::Text("  SLD Power: %.2f µW", lastMessage.sldPowerUw);
+        ImGui::Text("  SLD Power: %.2f uW", lastMessage.sldPowerUw);
 
         ImGui::Separator();
         ImGui::Text("Other Sensors:");
