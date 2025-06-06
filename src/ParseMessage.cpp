@@ -144,106 +144,113 @@ namespace SiphogLib {
   }
 
   ParsedMessage ParseMessage::parseFactoryMessage(const std::vector<uint8_t>& data) {
-    ParsedMessage parsedMessage;
-    size_t offset = 3; // Start after message type and length bytes
+      ParsedMessage parsedMessage;
+      size_t offset = 3; // Start after message type and length bytes
 
-    if (data.size() < 76) {
-      std::cout << "Error: Message too short, expected 76 bytes, got " << data.size() << std::endl;
-      return parsedMessage;
-    }
-
-    // Define parsing fields matching PAYLOAD_FORMAT_FACTORY
-    struct FieldDef {
-      std::string name;
-      char formatCode;
-      std::function<double(int32_t)> converter;
-    };
-
-    std::vector<FieldDef> fieldParsings = {
-      // Main fields
-      {"counter", 'I', [](int32_t value) -> double { return static_cast<double>(value); }},
-      {"ADC_count_I", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"ADC_count_Q", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"ROTATE_count_I", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"ROTATE_count_Q", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-
-      // MCU ADC data struct (2-byte unsigned shorts)
-      {"SLED_Neg", 'H', [](int32_t value) -> double { return adcVoltage10BitConv(value); }},
-      {"Case_Temp", 'H', [](int32_t value) -> double { return adcCaseTempCConv(value); }},
-      {"SLED_Pos", 'H', [](int32_t value) -> double { return adcVoltage10BitConv(value); }},
-      {"Bandgap_Volt", 'H', [](int32_t value) -> double { return static_cast<double>(value); }}, // passthrough
-      {"GND_Volt", 'H', [](int32_t value) -> double { return static_cast<double>(value); }},     // passthrough
-
-      // Auxiliary ADC struct (4-byte signed ints)
-      {"TEC_Current_Sense", 'i', [](int32_t value) -> double { return adcTecCurrentMaConv(value); }},
-      {"Heater_Sense", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"Sagnac_Power_Monitor", 'i', [](int32_t value) -> double { return adcSagnacVConv(value); }},
-      {"SLED_Power_Sense", 'i', [](int32_t value) -> double { return adcSledPowerUwConv(value); }},
-      {"SLED_Temp", 'i', [](int32_t value) -> double { return adcSledTempCConv(value); }},
-      {"SLED_Current_Sense", 'i', [](int32_t value) -> double { return adcSledCurrentMaConv(value); }},
-      {"Thermistor_Sense", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"Op_Amp_Temp", 'i', [](int32_t value) -> double { return adcOpAmpTempCConv(value); }},
-      {"ADC_Temp", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
-      {"Supply_Voltage", 'i', [](int32_t value) -> double { return adcSupplyVoltageConv(value); }},
-
-      // Status byte
-      {"status", 'B', [](int32_t value) -> double { return static_cast<double>(value); }}
-    };
-
-    for (const auto& field : fieldParsings) {
-      int32_t rawValue = 0;
-
-      // Parse based on format code
-      switch (field.formatCode) {
-      case 'I': // unsigned int (4 bytes)
-      case 'i': // signed int (4 bytes)
-        if (offset + 4 <= data.size()) {
-          rawValue = readLittleEndian<int32_t>(data, offset);
-          offset += 4;
-        }
-        break;
-      case 'H': // unsigned short (2 bytes)
-        if (offset + 2 <= data.size()) {
-          rawValue = readLittleEndian<uint16_t>(data, offset);
-          offset += 2;
-        }
-        break;
-      case 'B': // unsigned byte (1 byte)
-        if (offset + 1 <= data.size()) {
-          rawValue = data[offset];
-          offset += 1;
-        }
-        break;
+      if (data.size() < 76) {
+          std::cout << "Error: Message too short, expected 76 bytes, got " << data.size() << std::endl;
+          return parsedMessage;
       }
 
-      // Store raw value
-      parsedMessage.rawValues[field.name] = rawValue;
+      // Define parsing fields matching PAYLOAD_FORMAT_FACTORY
+      struct FieldDef {
+          std::string name;
+          char formatCode;
+          std::function<double(int32_t)> converter;
+      };
 
-      // Convert and store converted value
+      std::vector<FieldDef> fieldParsings = {
+          // Main fields
+          {"counter", 'I', [](int32_t value) -> double { return static_cast<double>(value); }},
+          {"ADC_count_I", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"ADC_count_Q", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"ROTATE_count_I", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"ROTATE_count_Q", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+
+          // MCU ADC data struct (2-byte unsigned shorts)
+          {"SLED_Neg", 'H', [](int32_t value) -> double { return adcVoltage10BitConv(value); }},
+          {"Case_Temp", 'H', [](int32_t value) -> double { return adcCaseTempCConv(value); }},
+          {"SLED_Pos", 'H', [](int32_t value) -> double { return adcVoltage10BitConv(value); }},
+          {"Bandgap_Volt", 'H', [](int32_t value) -> double { return static_cast<double>(value); }}, // passthrough
+          {"GND_Volt", 'H', [](int32_t value) -> double { return static_cast<double>(value); }},     // passthrough
+
+          // Auxiliary ADC struct (4-byte signed ints)
+          {"TEC_Current_Sense", 'i', [](int32_t value) -> double { return adcTecCurrentMaConv(value); }},
+          {"Heater_Sense", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"Sagnac_Power_Monitor", 'i', [](int32_t value) -> double { return adcSagnacVConv(value); }},
+          // IMPORTANT: Store raw voltage for SLED_Power_Sense, not converted microwatts
+          {"SLED_Power_Sense", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"SLED_Temp", 'i', [](int32_t value) -> double { return adcSledTempCConv(value); }},
+          {"SLED_Current_Sense", 'i', [](int32_t value) -> double { return adcSledCurrentMaConv(value); }},
+          {"Thermistor_Sense", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"Op_Amp_Temp", 'i', [](int32_t value) -> double { return adcOpAmpTempCConv(value); }},
+          {"ADC_Temp", 'i', [](int32_t value) -> double { return adcVoltage24BitConv(value); }},
+          {"Supply_Voltage", 'i', [](int32_t value) -> double { return adcSupplyVoltageConv(value); }},
+
+          // Status byte
+          {"status", 'B', [](int32_t value) -> double { return static_cast<double>(value); }}
+      };
+
+      for (const auto& field : fieldParsings) {
+          int32_t rawValue = 0;
+
+          // Parse based on format code
+          switch (field.formatCode) {
+          case 'I': // unsigned int (4 bytes)
+          case 'i': // signed int (4 bytes)
+              if (offset + 4 <= data.size()) {
+                  rawValue = readLittleEndian<int32_t>(data, offset);
+                  offset += 4;
+              }
+              break;
+          case 'H': // unsigned short (2 bytes)
+              if (offset + 2 <= data.size()) {
+                  rawValue = readLittleEndian<uint16_t>(data, offset);
+                  offset += 2;
+              }
+              break;
+          case 'B': // unsigned byte (1 byte)
+              if (offset + 1 <= data.size()) {
+                  rawValue = data[offset];
+                  offset += 1;
+              }
+              break;
+          }
+
+          // Store raw value
+          parsedMessage.rawValues[field.name] = rawValue;
+
+          // Convert and store converted value
+          try {
+              double convertedValue = field.converter(rawValue);
+              parsedMessage.convertedValues[field.name] = convertedValue;
+          }
+          catch (const std::exception& ex) {
+              std::cout << "Conversion error for " << field.name << ": " << ex.what() << std::endl;
+              parsedMessage.convertedValues[field.name] = std::numeric_limits<double>::quiet_NaN();
+          }
+      }
+
+      // Process additional conversions that depend on other fields
       try {
-        double convertedValue = field.converter(rawValue);
-        parsedMessage.convertedValues[field.name] = convertedValue;
+          // Add SLED power in microwatts (SLD_PWR (uW))
+          auto sledPowerIt = parsedMessage.rawValues.find("SLED_Power_Sense");
+          if (sledPowerIt != parsedMessage.rawValues.end()) {
+              double sledPowerUw = adcSledPowerUwConv(sledPowerIt->second);
+              parsedMessage.convertedValues["SLD_PWR (uW)"] = sledPowerUw;
+          }
+
+          // Add Sagnac power in microwatts (SAG_PWR (uW))
+          auto sagPowerIt = parsedMessage.rawValues.find("Sagnac_Power_Monitor");
+          if (sagPowerIt != parsedMessage.rawValues.end()) {
+              double sagPowerUw = adcSagnacPowerUwConv(sagPowerIt->second);
+              parsedMessage.convertedValues["SAG_PWR (uW)"] = sagPowerUw;
+          }
       }
       catch (const std::exception& ex) {
-        std::cout << "Conversion error for " << field.name << ": " << ex.what() << std::endl;
-        parsedMessage.convertedValues[field.name] = std::numeric_limits<double>::quiet_NaN();
+          std::cout << "Additional conversion error: " << ex.what() << std::endl;
       }
-    }
 
-    // Process additional conversions that depend on other fields
-    try {
-      auto sagPowerIt = parsedMessage.rawValues.find("Sagnac_Power_Monitor");
-      if (sagPowerIt != parsedMessage.rawValues.end()) {
-        double sagPowerUw = adcSagnacPowerUwConv(sagPowerIt->second);
-        parsedMessage.convertedValues["SAG_PWR (uW)"] = sagPowerUw;
-      }
-    }
-    catch (const std::exception& ex) {
-      std::cout << "Additional conversion error for SAG_PWR (uW): " << ex.what() << std::endl;
-      parsedMessage.convertedValues["SAG_PWR (uW)"] = std::numeric_limits<double>::quiet_NaN();
-    }
-
-    return parsedMessage;
+      return parsedMessage;
   }
-
 } // namespace SiphogLib
